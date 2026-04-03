@@ -21,6 +21,14 @@ A RESTful API built with Node.js, Express, TypeScript, MongoDB, and Mongoose.
 - The `/feed` endpoint uses MongoDB aggregation so ranking work is pushed into the database layer.
 - Seeding is executed manually rather than on every container startup, to avoid unnecessary resets and to keep application startup cleaner and more production-like.
 
+## Feed Assumption
+
+To support the feed requirement of prioritizing books by authors from the same country as the authenticated user, this implementation assumes that each book stores an `authorCountry` field in the database.
+
+This was added because the original entity definition includes only `author` as a string, which is not sufficient to determine the author’s country during feed calculation. Without this assumption, the same-country ranking rule cannot be implemented reliably or efficiently.
+
+As a result, the feed logic compares `book.authorCountry` with `user.country`, and then applies the weighted relevance score on the matching result set.
+
 ## Tech Stack
 
 - Node.js
