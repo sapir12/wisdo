@@ -1,0 +1,353 @@
+### ============================================================================
+### Book Management API - IntelliJ HTTP Client file
+### Save as: requests.http
+### ============================================================================
+### Notes:
+### 1. Start the app first
+### 2. This file logs in, stores the JWT, and reuses it automatically
+### 3. Run requests one by one from top to bottom
+### ============================================================================
+
+@host = http://localhost:3000
+@contentType = application/json
+
+### ----------------------------------------------------------------------------
+### Health check
+### ----------------------------------------------------------------------------
+
+GET {{host}}/health
+
+> {%
+  client.test("Health returns 200", function () {
+    client.assert(response.status === 200, "Expected status 200");
+  });
+  client.test("Health response contains ok status", function () {
+    client.assert(response.body.status === "ok", "Expected status to be ok");
+  });
+%}
+
+<> 2026-04-02T171346.200.json
+<> 2026-04-02T171309.200.json
+
+### ----------------------------------------------------------------------------
+### Login - admin
+### ----------------------------------------------------------------------------
+
+POST {{host}}/login
+Content-Type: {{contentType}}
+
+{
+  "username": "admin",
+  "password": "password123"
+}
+
+> {%
+  client.test("Login returns 200", function () {
+    client.assert(response.status === 200, "Expected status 200");
+  });
+  client.test("Login returns token", function () {
+    client.assert(!!response.body.token, "Expected JWT token");
+  });
+  client.global.set("jwt", response.body.token);
+%}
+
+<> 2026-04-02T171346-1.200.json
+<> 2026-04-02T171318.200.json
+
+### ----------------------------------------------------------------------------
+### Login - invalid credentials
+### ----------------------------------------------------------------------------
+
+POST {{host}}/login
+Content-Type: {{contentType}}
+
+{
+  "username": "admin",
+  "password": "wrong-password"
+}
+
+> {%
+  client.test("Invalid login returns 401", function () {
+    client.assert(response.status === 401, "Expected status 401");
+  });
+%}
+
+<> 2026-04-02T171346.401.json
+
+### ----------------------------------------------------------------------------
+### Create book - success
+### ----------------------------------------------------------------------------
+
+POST {{host}}/books
+Authorization: Bearer {{jwt}}
+Content-Type: {{contentType}}
+
+{
+  "title": "Node.js Patterns",
+  "author": "Mario Casciaro",
+  "authorCountry": "IT",
+  "publishedDate": "2020-01-01",
+  "pages": 526,
+  "library": "65f100000000000000000001"
+}
+
+> {%
+  client.test("Create book returns 201", function () {
+    client.assert(response.status === 201, "Expected status 201");
+  });
+  client.test("Created book has title", function () {
+    client.assert(response.body.title === "Node.js Patterns", "Expected created title");
+  });
+  client.test("Created book has id", function () {
+    client.assert(!!response.body._id, "Expected book id");
+  });
+  client.global.set("createdBookId", response.body._id);
+%}
+
+<> 2026-04-02T171347.201.json
+
+### ----------------------------------------------------------------------------
+### Create book - validation error
+### ----------------------------------------------------------------------------
+
+POST {{host}}/books
+Authorization: Bearer {{jwt}}
+Content-Type: {{contentType}}
+
+{
+  "title": "",
+  "author": "Unknown",
+  "authorCountry": "US",
+  "publishedDate": "2020-01-01",
+  "pages": 0,
+  "library": "65f100000000000000000001"
+}
+
+> {%
+  client.test("Invalid create book returns 400", function () {
+    client.assert(response.status === 400, "Expected status 400");
+  });
+  client.test("Validation error message exists", function () {
+    client.assert(response.body.message === "Validation failed", "Expected validation failed");
+  });
+%}
+
+<> 2026-04-02T171347.400.json
+
+### ----------------------------------------------------------------------------
+### Create book - forbidden library
+### ----------------------------------------------------------------------------
+
+POST {{host}}/login
+Content-Type: {{contentType}}
+
+{
+  "username": "reader_uk",
+  "password": "password123"
+}
+
+> {%
+  client.test("reader_uk login returns 200", function () {
+    client.assert(response.status === 200, "Expected status 200");
+  });
+  client.global.set("readerJwt", response.body.token);
+%}
+
+<> 2026-04-02T171347.200.json
+
+###
+
+POST {{host}}/books
+Authorization: Bearer {{readerJwt}}
+Content-Type: {{contentType}}
+
+{
+  "title": "Forbidden Book",
+  "author": "Unknown",
+  "authorCountry": "US",
+  "publishedDate": "2020-01-01",
+  "pages": 100,
+  "library": "65f100000000000000000001"
+}
+
+> {%
+  client.test("Forbidden create book returns 403", function () {
+    client.assert(response.status === 403, "Expected status 403");
+  });
+%}
+
+<> 2026-04-02T171347.403.json
+
+### ----------------------------------------------------------------------------
+### List books - all accessible books
+### ----------------------------------------------------------------------------
+
+GET {{host}}/books
+Authorization: Bearer {{jwt}}
+
+> {%
+  client.test("List books returns 200", function () {
+    client.assert(response.status === 200, "Expected status 200");
+  });
+  client.test("List books returns array", function () {
+    client.assert(Array.isArray(response.body), "Expected array");
+  });
+%}
+
+<> 2026-04-02T171347-1.200.json
+
+### ----------------------------------------------------------------------------
+### List books - by specific accessible library
+### ----------------------------------------------------------------------------
+
+GET {{host}}/books?library=65f100000000000000000001
+Authorization: Bearer {{jwt}}
+
+> {%
+  client.test("Filtered books returns 200", function () {
+    client.assert(response.status === 200, "Expected status 200");
+  });
+  client.test("Filtered books returns array", function () {
+    client.assert(Array.isArray(response.body), "Expected array");
+  });
+%}
+
+<> 2026-04-02T171347-2.200.json
+
+### ----------------------------------------------------------------------------
+### Get book by id - success
+### ----------------------------------------------------------------------------
+
+GET {{host}}/books/{{createdBookId}}
+Authorization: Bearer {{jwt}}
+
+> {%
+  client.test("Get book by id returns 200", function () {
+    client.assert(response.status === 200, "Expected status 200");
+  });
+  client.test("Fetched book id matches created id", function () {
+    client.assert(response.body._id === client.global.get("createdBookId"), "Expected matching id");
+  });
+%}
+
+<> 2026-04-02T171348.200.json
+
+### ----------------------------------------------------------------------------
+### Get book by id - unauthorized
+### ----------------------------------------------------------------------------
+
+GET {{host}}/books/{{createdBookId}}
+
+> {%
+  client.test("Missing token returns 401", function () {
+    client.assert(response.status === 401, "Expected status 401");
+  });
+%}
+
+<> 2026-04-02T171348.401.json
+
+### ----------------------------------------------------------------------------
+### Update book - success
+### ----------------------------------------------------------------------------
+
+PUT {{host}}/books/{{createdBookId}}
+Authorization: Bearer {{jwt}}
+Content-Type: {{contentType}}
+
+{
+  "title": "Node.js Patterns - Updated",
+  "pages": 640
+}
+
+> {%
+  client.test("Update book returns 200", function () {
+    client.assert(response.status === 200, "Expected status 200");
+  });
+  client.test("Updated title is returned", function () {
+    client.assert(response.body.title === "Node.js Patterns - Updated", "Expected updated title");
+  });
+  client.test("Updated pages are returned", function () {
+    client.assert(response.body.pages === 640, "Expected updated pages");
+  });
+%}
+
+<> 2026-04-02T171348-1.200.json
+
+### ----------------------------------------------------------------------------
+### Update book - invalid empty payload
+### ----------------------------------------------------------------------------
+
+PUT {{host}}/books/{{createdBookId}}
+Authorization: Bearer {{jwt}}
+Content-Type: {{contentType}}
+
+{
+}
+
+> {%
+  client.test("Empty update payload returns 400", function () {
+    client.assert(response.status === 400, "Expected status 400");
+  });
+%}
+
+<> 2026-04-02T171348.400.json
+
+### ----------------------------------------------------------------------------
+### Feed - success
+### ----------------------------------------------------------------------------
+
+GET {{host}}/feed
+Authorization: Bearer {{jwt}}
+
+> {%
+  client.test("Feed returns 200", function () {
+    client.assert(response.status === 200, "Expected status 200");
+  });
+  client.test("Feed returns array", function () {
+    client.assert(Array.isArray(response.body), "Expected array");
+  });
+%}
+
+<> 2026-04-02T171348-2.200.json
+
+### ----------------------------------------------------------------------------
+### Feed - unauthorized
+### ----------------------------------------------------------------------------
+
+GET {{host}}/feed
+
+> {%
+  client.test("Unauthorized feed returns 401", function () {
+    client.assert(response.status === 401, "Expected status 401");
+  });
+%}
+
+<> 2026-04-02T171348-1.401.json
+
+### ----------------------------------------------------------------------------
+### Delete book - success
+### ----------------------------------------------------------------------------
+
+DELETE {{host}}/books/{{createdBookId}}
+Authorization: Bearer {{jwt}}
+
+> {%
+  client.test("Delete book returns 204", function () {
+    client.assert(response.status === 204, "Expected status 204");
+  });
+%}
+
+### ----------------------------------------------------------------------------
+### Get deleted book - should fail
+### ----------------------------------------------------------------------------
+
+GET {{host}}/books/{{createdBookId}}
+Authorization: Bearer {{jwt}}
+
+> {%
+  client.test("Deleted book is not found", function () {
+    client.assert(response.status === 404, "Expected status 404");
+  });
+%}
+
+<> 2026-04-02T171349.404.json
